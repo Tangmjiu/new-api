@@ -2,16 +2,39 @@ name: Publish Docker image (Multi-arch)
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
-env:
-  IMAGE: ghcr.io/steve3184/new-api
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.meta.outputs.sha }}
+      channel: ${{ steps.meta.outputs.channel }}
+    steps:
+      - name: Resolve fork registry and immutable build tag
+        id: meta
+        shell: bash
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo 'channel=latest' >> "$GITHUB_OUTPUT"
+          else
+            echo 'channel=free-group' >> "$GITHUB_OUTPUT"
+          fi
+
   build_single_arch:
-    name: Build & push (${{ matrix.arch }})
+    name: Build and push (${{ matrix.arch }})
+    needs: metadata
     strategy:
       fail-fast: false
       matrix:
@@ -23,103 +46,62 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    outputs:
-      sha: ${{ steps.version.outputs.sha }}
-
+    timeout-minutes: 40
     permissions:
       packages: write
       contents: read
-
+    env:
+      IMAGE: ${{ needs.metadata.outputs.image }}
+      BUILD_TAG: ${{ needs.metadata.outputs.sha }}
     steps:
-      - name: Check out
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 1
-
-      - name: Resolve short SHA & write VERSION
-        id: version
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          echo "SHA=${SHA}" >> $GITHUB_ENV
-          echo "sha=${SHA}" >> $GITHUB_OUTPUT
-          echo "${SHA}" > VERSION
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Write build version
+        run: echo "free-${GITHUB_SHA:0:12}" > VERSION
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (labels)
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ env.IMAGE }}
-
-      - name: Build & push
+      - name: Build and push immutable architecture image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
-          tags: |
-            ${{ env.IMAGE }}:latest-${{ matrix.arch }}
-            ${{ env.IMAGE }}:${{ env.SHA }}-${{ matrix.arch }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ env.IMAGE }}:${{ env.BUILD_TAG }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.title=New API
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0
+          build-args: GOPROXY=https://proxy.golang.org,direct
+          cache-from: type=gha,scope=free-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=free-${{ matrix.arch }}
           provenance: mode=max
           sbom: true
-
-      - name: Image summary
-        run: |
-          echo "### Docker Image (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE }}:latest-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
   create_manifests:
-    name: Create multi-arch manifests
-    needs: [build_single_arch]
+    name: Publish multi-arch tag
+    needs: [metadata, build_single_arch]
     runs-on: ubuntu-latest
-
     permissions:
       packages: write
-
+    env:
+      IMAGE: ${{ needs.metadata.outputs.image }}
+      BUILD_TAG: ${{ needs.metadata.outputs.sha }}
+      CHANNEL: ${{ needs.metadata.outputs.channel }}
     steps:
-      - name: Set SHA
-        run: echo "SHA=${{ needs.build_single_arch.outputs.sha }}" >> $GITHUB_ENV
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create & push manifest (latest)
+      - name: Create multi-arch manifest
         run: |
-          docker buildx imagetools create \
-            -t ${{ env.IMAGE }}:latest \
-            ${{ env.IMAGE }}:latest-amd64 \
-            ${{ env.IMAGE }}:latest-arm64
-
-      - name: Create & push manifest (sha)
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.IMAGE }}:${{ env.SHA }} \
-            ${{ env.IMAGE }}:${{ env.SHA }}-amd64 \
-            ${{ env.IMAGE }}:${{ env.SHA }}-arm64
-
-      - name: Manifest summary
-        run: |
-          echo "### Multi-arch Manifest" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          docker buildx imagetools inspect ${{ env.IMAGE }}:latest >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          docker buildx imagetools create -t "$IMAGE:$BUILD_TAG" -t "$IMAGE:$CHANNEL" "$IMAGE:$BUILD_TAG-amd64" "$IMAGE:$BUILD_TAG-arm64"
+          docker buildx imagetools inspect "$IMAGE:$BUILD_TAG" | tee /tmp/manifest.txt
+          echo '### New API image' >> "$GITHUB_STEP_SUMMARY"
+          echo "\`docker pull $IMAGE:$CHANNEL\`" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/manifest.txt >> "$GITHUB_STEP_SUMMARY"

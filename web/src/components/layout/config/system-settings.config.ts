@@ -78,6 +78,11 @@ function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           items: getModelsSectionNavItems(t),
         },
         {
+          title: t('Free group settings'),
+          icon: Shield,
+          url: '/system-settings/free-group',
+        },
+        {
           title: t('Request policies'),
           icon: Route,
           items: getPolicySectionNavItems(t),

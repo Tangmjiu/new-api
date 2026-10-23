@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -22,6 +24,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFreeGroupPricingRequiresAdmission(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{UsingGroup: model.FreeGroupName, OriginModelName: "administrator-selected-model"}
+	_, err := ModelPriceHelper(c, info, 0, nil)
+	require.Error(t, err)
+	common.SetContextKey(c, constant.ContextKeyFreeGroup, true)
+	_, err = ModelPriceHelperPerCall(c, info)
+	require.Error(t, err)
+	common.SetContextKey(c, constant.ContextKeyFreeGroupAdmitted, true)
+	price, err := ModelPriceHelper(c, info, 100, nil)
+	require.NoError(t, err)
+	assert.True(t, price.FreeModel)
+	assert.True(t, price.BillingFree)
+	assert.Zero(t, price.QuotaToPreConsume)
+}
 
 func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -127,7 +145,7 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 		"billing_setting.billing_mode":    `{"tiered-fallback-model":"tiered_expr"}`,
 		"billing_setting.billing_expr":    `{"tiered-fallback-model":"len <= 1200 ? tier(\"base\", p * 3 + c * 15) : tier(\"long\", p * 30 + c * 150)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1,"free":0}`,
+		"group_ratio_setting.group_ratio": `{"default":1,"zero-cost-legacy":0}`,
 	}))
 
 	cases := []struct {
@@ -144,7 +162,7 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 		{"fraction above one preserves context tier", "default", 1000, 0, 2.5, 3750},
 		{"small input has no token floor", "default", 100, 0, 1, 150},
 		{"zero input", "default", 0, 100, 1, 0},
-		{"free group", "free", 1000, 0, 2.5, 0},
+		{"zero cost traditional group", "zero-cost-legacy", 1000, 0, 2.5, 0},
 	}
 
 	for _, tc := range cases {
@@ -175,7 +193,7 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 			actual, err := billingexpr.ComputeTieredQuotaWithRequest(info.TieredBillingSnapshot, billingexpr.TokenParams{P: 1000, C: 100, Len: 1000}, *info.BillingRequestInput)
 			require.NoError(t, err)
 			wantActual := 2250
-			if tc.group == "free" {
+			if tc.group == "zero-cost-legacy" {
 				wantActual = 0
 			}
 			assert.Equal(t, wantActual, actual.ActualQuotaAfterGroup, "reservation multiplier must not change settlement")

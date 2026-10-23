@@ -34,6 +34,7 @@ import { useForm, type SubmitErrorHandler } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { MyFreeQuota } from '@/features/free-group/components/my-free-quota'
 import { DateTimePicker } from '@/components/datetime-picker'
 import {
   SideDrawerSection,
@@ -206,7 +207,7 @@ export function ApiKeysMutateDrawer({
     () =>
       Object.entries(groupsData?.data || {}).map(([key, info]) => ({
         value: key,
-        label: key,
+        label: key === 'free' ? t('Free group') : key,
         desc: info.desc?.trim() ? translateServerText(t, info.desc) : undefined,
         ratio: info.ratio,
       })),
@@ -214,7 +215,7 @@ export function ApiKeysMutateDrawer({
   )
   const backendHasAuto = groups.some((g) => g.value === 'auto')
   const availableAutoGroupNames = useMemo(
-    () => groups.filter((group) => group.value !== 'auto').map((g) => g.value),
+    () => groups.filter((group) => group.value !== 'auto' && group.value !== 'free').map((g) => g.value),
     [groups]
   )
   const globalAutoGroups = useMemo(() => {
@@ -581,6 +582,7 @@ export function ApiKeysMutateDrawer({
                   )}
                 />
 
+                {selectedGroup === 'free' && <MyFreeQuota compact />}
                 {selectedGroup === 'auto' && (
                   <FormField
                     control={form.control}

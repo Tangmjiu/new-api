@@ -244,6 +244,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	started := time.Now()
 	var info *relaycommon.RelayInfo
 	billingPrepared := false
+	defer service.FinishFreeGroupRelay(c)
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			apiErr = types.NewError(fmt.Errorf("responses websocket call panic: %v", recovered), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
@@ -262,6 +263,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		// so neither policy record belongs here.
 		if info != nil && billingPrepared {
 			apiErr = RefundFailedRequestBilling(c, info, apiErr)
+		}
+		if apiErr != nil {
+			common.SetContextKey(c, appconstant.ContextKeyFreeGroupFailed, true)
 		}
 	}()
 	if modelName == "" {
@@ -315,7 +319,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				}
 				billingPrepared = true
 			} else {
-				info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+				if !service.IsFreeGroupRequest(c) {
+					info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+				}
 				if apiErr = service.PrepareTieredBillingForSelectedGroup(c, info); apiErr != nil {
 					return apiErr
 				}

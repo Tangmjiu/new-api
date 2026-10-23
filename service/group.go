@@ -18,6 +18,9 @@ type UserGroupAccess struct {
 }
 
 func (access UserGroupAccess) Allows(group string) bool {
+	if group == model.FreeGroupName {
+		return false
+	}
 	if group == "auto" {
 		return len(access.AutoGroups) > 0
 	}
@@ -56,6 +59,7 @@ func GetUserUsableGroups(userGroup string) map[string]string {
 			groupsCopy[userGroup] = description
 		}
 	}
+	delete(groupsCopy, model.FreeGroupName)
 	return groupsCopy
 }
 

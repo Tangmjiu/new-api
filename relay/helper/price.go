@@ -75,6 +75,9 @@ func resolveAutoRoutePricingModel(c *gin.Context, modelName string) string {
 
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hosttypes.GroupRatioInfo {
+	if relayInfo.UsingGroup == model.FreeGroupName {
+		return hosttypes.GroupRatioInfo{GroupSpecialRatio: -1}
+	}
 	groupRatioInfo := hosttypes.GroupRatioInfo{
 		GroupRatio:        1.0, // default ratio
 		GroupSpecialRatio: -1,
@@ -103,6 +106,13 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
+	if info.UsingGroup == model.FreeGroupName {
+		if !common.GetContextKeyBool(c, constant.ContextKeyFreeGroup) || !common.GetContextKeyBool(c, constant.ContextKeyFreeGroupAdmitted) {
+			return hosttypes.PriceData{}, errors.New("Free request has not passed independent admission controls")
+		}
+		info.PriceData = hosttypes.PriceData{FreeModel: true, BillingFree: true, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupSpecialRatio: -1}}
+		return info.PriceData, nil
+	}
 	originModelName := info.OriginModelName
 	if pricingModelName := resolveAutoRoutePricingModel(c, originModelName); pricingModelName != originModelName {
 		info.OriginModelName = pricingModelName
@@ -116,6 +126,9 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	configuredModelPrice := modelPrice
 
 	groupRatioInfo := HandleGroupRatio(c, info)
+	if info.UsingGroup == model.FreeGroupName {
+		return hosttypes.PriceData{}, errors.New("reserved Free group reached traditional billing")
+	}
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(billingModelName) == billing_setting.BillingModeTieredExpr {
@@ -246,12 +259,18 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
+	if info.UsingGroup == model.FreeGroupName {
+		return ModelPriceHelper(c, info, 0, nil)
+	}
 	originModelName := info.OriginModelName
 	if pricingModelName := resolveAutoRoutePricingModel(c, originModelName); pricingModelName != originModelName {
 		info.OriginModelName = pricingModelName
 		defer func() { info.OriginModelName = originModelName }()
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
+	if info.UsingGroup == model.FreeGroupName {
+		return hosttypes.PriceData{}, errors.New("reserved Free group reached traditional billing")
+	}
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
 	usePrice := success

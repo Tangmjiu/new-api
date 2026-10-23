@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { getGroups as getUserGroups } from '@/features/users/api'
 import { api, type ApiRequestConfig } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
@@ -697,9 +696,16 @@ export async function getOllamaVersion(
 // ============================================================================
 
 /**
- * Get all available groups (re-exported from users API for convenience)
+ * Get routing groups for channel configuration, including the enabled Free marker.
  */
-export const getGroups = getUserGroups
+export async function getGroups(): Promise<{
+  success: boolean
+  message?: string
+  data: string[]
+}> {
+  const response = await api.get('/api/channel/groups')
+  return response.data
+}
 
 // ============================================================================
 // Prefill Groups (Model Groups)

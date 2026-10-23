@@ -293,9 +293,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	}
 	token, err = GetTokenByKey(key, false)
 	if err == nil {
-		if token.Status == common.TokenStatusExhausted ||
-			token.Status == common.TokenStatusExpired ||
-			token.Status != common.TokenStatusEnabled {
+		if token.Status != common.TokenStatusEnabled && !(token.Group == FreeGroupName && token.Status == common.TokenStatusExhausted) {
 			return token, ErrTokenInvalid
 		}
 		if token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp() {
@@ -308,7 +306,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 			}
 			return token, ErrTokenInvalid
 		}
-		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+		if token.Group != FreeGroupName && !token.UnlimitedQuota && token.RemainQuota <= 0 {
 			if !common.RedisEnabled {
 				token.Status = common.TokenStatusExhausted
 				err := token.SelectUpdate()
@@ -580,6 +578,9 @@ func GetTokenGroups() ([]string, error) {
 func MigrateTokenGroup(sourceGroup, targetGroup string) (int, error) {
 	sourceGroup = strings.TrimSpace(sourceGroup)
 	targetGroup = strings.TrimSpace(targetGroup)
+	if sourceGroup == FreeGroupName || targetGroup == FreeGroupName {
+		return 0, errors.New("Free tokens cannot be migrated by traditional group operations")
+	}
 	if sourceGroup == "" || targetGroup == "" {
 		return 0, errors.New("source_group 和 target_group 不能为空")
 	}

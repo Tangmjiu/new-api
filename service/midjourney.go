@@ -44,6 +44,14 @@ func PrepareMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.
 	if relayInfo == nil {
 		return false, errors.New("relay info is nil")
 	}
+	if relayInfo.UsingGroup == model.FreeGroupName {
+		// Independent Free admission has already run in the relay controller.
+		// Legacy task settlement must never touch a paid funding source.
+		if !relayInfo.PriceData.FreeModel || !relayInfo.PriceData.BillingFree {
+			return false, errors.New("Free request has not passed independent admission controls")
+		}
+		return false, nil
+	}
 	if quota < 0 {
 		return false, errors.New("quota cannot be negative")
 	}

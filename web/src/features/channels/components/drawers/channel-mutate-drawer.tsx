@@ -555,7 +555,7 @@ export function ChannelMutateDrawer({
 
   // Fetch available groups
   const { data: groupsData, isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['groups'],
+    queryKey: ['channel-groups'],
     queryFn: async () => requireServerSuccess(await getGroups()),
     enabled: open && !showProviderPicker,
   })

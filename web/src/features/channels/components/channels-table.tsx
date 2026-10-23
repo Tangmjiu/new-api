@@ -218,7 +218,7 @@ export function ChannelsTable() {
 
   // Fetch groups for filter
   const { data: groupsData } = useQuery({
-    queryKey: ['groups'],
+    queryKey: ['channel-groups'],
     queryFn: async () => requireServerSuccess(await getGroups()),
   })
 

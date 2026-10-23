@@ -95,6 +95,12 @@ func SetApiRouter(router *gin.Engine) {
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.DisableCache(), middleware.UserAuth())
 			{
+				selfRoute.GET("/free-group", controller.GetMyFreeGroup)
+				selfRoute.GET("/free-group/queue", controller.ListMyFreeGroupQueue)
+				selfRoute.GET("/free-group/queue/:queue_id", controller.GetMyFreeGroupQueue)
+				selfRoute.DELETE("/free-group/queue/:queue_id", controller.CancelMyFreeGroupQueue)
+				selfRoute.POST("/free-group/apply", middleware.CriticalRateLimit(), middleware.FreeGroupCaptcha(), controller.ApplyForFreeGroup)
+				selfRoute.POST("/free-group/verify", middleware.CriticalRateLimit(), middleware.FreeGroupCaptcha(), controller.VerifyFreeGroupHuman)
 				selfRoute.GET("/sessions", middleware.DisableCache(), controller.GetLoginSessions)
 				selfRoute.DELETE("/sessions/:sid", middleware.DisableCache(), controller.DeleteLoginSession)
 				selfRoute.POST("/sessions/revoke-others", middleware.DisableCache(), controller.RevokeOtherLoginSessions)
@@ -188,6 +194,24 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
+		}
+
+		freeGroupAdminRoute := apiRouter.Group("/free-group")
+		freeGroupAdminRoute.Use(middleware.RootAuth())
+		{
+			freeGroupAdminRoute.GET("/config", controller.GetFreeGroupConfig)
+			freeGroupAdminRoute.POST("/config/preview", controller.PreviewFreeGroupConfig)
+			freeGroupAdminRoute.POST("/config/preset", controller.PreviewFreeGroupPreset)
+			freeGroupAdminRoute.GET("/dashboard", controller.GetFreeGroupDashboard)
+			freeGroupAdminRoute.GET("/audits", controller.GetFreeGroupAudits)
+			freeGroupAdminRoute.POST("/penalties", middleware.DisableCache(), controller.UpdateFreeGroupPenalty)
+			freeGroupAdminRoute.PUT("/config", middleware.DisableCache(), controller.UpdateFreeGroupConfig)
+			freeGroupAdminRoute.GET("/config/versions", controller.ListFreeGroupConfigVersions)
+			freeGroupAdminRoute.GET("/config/versions/:version", controller.GetFreeGroupConfigVersion)
+			freeGroupAdminRoute.POST("/config/versions/:version/rollback", middleware.DisableCache(), controller.RollbackFreeGroupConfig)
+			freeGroupAdminRoute.GET("/members", controller.ListFreeGroupMembers)
+			freeGroupAdminRoute.PUT("/members/:user_id", middleware.DisableCache(), controller.UpdateFreeGroupMember)
+			freeGroupAdminRoute.DELETE("/members/:user_id", middleware.DisableCache(), controller.RemoveFreeGroupMember)
 		}
 
 		// Subscription billing (plans, purchase, admin management)

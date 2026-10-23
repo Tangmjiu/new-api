@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
+import { MyFreeQuota } from '@/features/free-group/components/my-free-quota'
+
 import { SectionPageLayout } from '@/components/layout'
 
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
@@ -35,7 +37,7 @@ export function ApiKeys() {
           <ApiKeysPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ApiKeysTable />
+          <div className='flex h-full min-h-0 flex-col gap-4'><div className='max-h-80 shrink-0 overflow-auto'><MyFreeQuota /></div><div className='min-h-0 flex-1'><ApiKeysTable /></div></div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

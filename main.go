@@ -351,6 +351,10 @@ func InitResources() error {
 		return err
 	}
 
+	if err = service.InitFreeGroupConfig(); err != nil {
+		common.SysError("Free configuration initialization failed; Free access remains unavailable: " + err.Error())
+	}
+	service.StartFreeGroupConfigSync(context.Background(), time.Second)
 	perfmetrics.Init()
 
 	// 启动系统监控

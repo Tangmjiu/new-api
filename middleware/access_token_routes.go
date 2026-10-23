@@ -41,6 +41,26 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
+	"GET /api/user/free-group/queue":                         accessTokenSessionRule,
+	"GET /api/free-group/config/versions/:version":           accessTokenSessionRule,
+	"POST /api/free-group/config/preview":                    accessTokenSessionRule,
+	"POST /api/free-group/config/preset":                     accessTokenSessionRule,
+	"GET /api/free-group/dashboard":                          accessTokenSessionRule,
+	"GET /api/free-group/audits":                             accessTokenSessionRule,
+	"POST /api/free-group/penalties":                         accessTokenSessionRule,
+	"DELETE /api/free-group/members/:user_id":                accessTokenSessionRule,
+	"GET /api/user/free-group":                               accessTokenScopeRule("profile:read"),
+	"GET /api/user/free-group/queue/:queue_id":               accessTokenSessionRule,
+	"DELETE /api/user/free-group/queue/:queue_id":            accessTokenSessionRule,
+	"POST /api/user/free-group/apply":                        accessTokenSessionRule,
+	"POST /api/user/free-group/verify":                       accessTokenSessionRule,
+	"GET /api/free-group/config":                             accessTokenSessionRule,
+	"PUT /api/free-group/config":                             accessTokenSessionRule,
+	"GET /api/free-group/config/versions":                    accessTokenSessionRule,
+	"POST /api/free-group/config/versions/:version/rollback": accessTokenSessionRule,
+	"GET /api/free-group/members":                            accessTokenSessionRule,
+	"PUT /api/free-group/members/:user_id":                   accessTokenSessionRule,
+
 	// Fork routes retain their existing role and ownership checks in addition to scopes.
 	"GET /api/status-check":                                        accessTokenAnyRule,
 	"GET /api/rankings/users":                                      accessTokenAnyRule,

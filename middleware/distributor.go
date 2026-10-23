@@ -50,6 +50,33 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		if strings.HasPrefix(c.Request.URL.Path, "/pg/") && modelRequest.Group == model.FreeGroupName {
+			if err := service.CheckFreeGroupAccess(c.GetInt("id")); err != nil {
+				service.AbortFreeGroupRequest(c, err)
+				return
+			}
+			common.SetContextKey(c, constant.ContextKeyFreeGroup, true)
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, model.FreeGroupName)
+		}
+		if service.IsFreeGroupRequest(c) {
+			defer service.FinishFreeGroupRelay(c)
+			if !common.GetContextKeyBool(c, constant.ContextKeyFreeGroup) {
+				service.AbortFreeGroupRequest(c, service.ErrFreeGroupForbidden)
+				return
+			}
+			if err := service.CheckFreeGroupCooldown(c, c.GetInt("id")); err != nil {
+				service.AbortFreeGroupRequest(c, err)
+				return
+			}
+			if err := service.FreeGroupModelCheck(c, modelRequest.Model); err != nil {
+				service.AbortFreeGroupRequest(c, err)
+				return
+			}
+			if err := service.FreeGroupRequestValidation(c); err != nil {
+				service.AbortFreeGroupRequest(c, err)
+				return
+			}
+		}
 		_, pinned, _ := constraints.ResolvedPin()
 		if !pinned {
 			// Select a channel for the user
@@ -81,7 +108,7 @@ func Distribute() func(c *gin.Context) {
 				}
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/") && modelRequest.Group != "" {
-					if !service.GetRequestUserGroupAccess(c).Allows(modelRequest.Group) && modelRequest.Group != usingGroup {
+					if modelRequest.Group != model.FreeGroupName && !service.GetRequestUserGroupAccess(c).Allows(modelRequest.Group) && modelRequest.Group != usingGroup {
 						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 						return
 					}

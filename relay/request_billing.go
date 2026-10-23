@@ -25,7 +25,7 @@ import (
 func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	meta := &types.TokenCountMeta{TokenType: types.TokenTypeTokenizer}
-	if info.Request != nil && (needSensitiveCheck || constant.CountToken) {
+	if info.Request != nil && (needSensitiveCheck || constant.CountToken || service.IsFreeGroupRequest(c)) {
 		meta = info.Request.GetTokenCountMeta()
 	} else {
 		// Avoid building CombineText when only the pricing quantities are needed.
@@ -51,11 +51,19 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 	}
 
 	tokens, err := service.EstimateRequestToken(c, meta, info)
+	if service.IsFreeGroupRequest(c) {
+		tokens, err = service.CountRequestToken(c, meta, info)
+	}
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeCountTokenFailed)
 	}
 	info.SetEstimatePromptTokens(tokens)
 
+	if service.IsFreeGroupRequest(c) {
+		if err := service.BeginFreeGroupRelay(c, info, tokens, meta); err != nil {
+			return service.FreeRelayAPIError(err)
+		}
+	}
 	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))

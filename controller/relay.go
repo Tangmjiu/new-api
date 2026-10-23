@@ -81,8 +81,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError *types.NewAPIError
 		ws          *websocket.Conn
 	)
+	defer service.FinishFreeGroupRelay(c)
 
 	if relayFormat == types.RelayFormatOpenAIRealtime || relayFormat == types.RelayFormatUnrealSpeechWebSocket {
+		if service.IsFreeGroupRequest(c) {
+			service.AbortFreeGroupRequest(c, &service.FreeGroupRejection{Rule: "request.protocol", Status: http.StatusBadRequest, Recovery: "use_http_or_responses_websocket"})
+			return
+		}
 		var err error
 		ws, err = upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
@@ -94,6 +99,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	defer func() {
 		if newAPIError != nil {
+			if service.IsFreeGroupRequest(c) && strings.HasPrefix(string(newAPIError.GetErrorCode()), "free_group_") && ws == nil {
+				service.AbortFreeGroupRequest(c, newAPIError.Err)
+				return
+			}
 			service.RecordRequestPolicyTermination(c, newAPIError)
 			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
 			// Apply global message rewrites only after channel retries and
@@ -338,7 +347,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryNoAvailableChannel, map[string]any{"Group": selectGroup, "Model": info.OriginModelName})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+	if info.UsingGroup != model.FreeGroupName {
+		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+	}
 
 	selectedModel := retryParam.SelectedModel
 	if selectedModel == "" {
@@ -401,6 +412,23 @@ func RelayMidjourney(c *gin.Context) {
 	}
 
 	var mjErr *taskdto.MidjourneyResponse
+	if service.IsFreeGroupRequest(c) {
+		meta, tokenErr := service.FreeGroupTaskTokenMeta(c, relayInfo.OriginModelName)
+		if tokenErr != nil {
+			service.AbortFreeGroupRequest(c, tokenErr)
+			return
+		}
+		promptTokens, tokenErr := service.CountRequestToken(c, meta, relayInfo)
+		if tokenErr != nil {
+			service.AbortFreeGroupRequest(c, tokenErr)
+			return
+		}
+		if err := service.BeginFreeGroupRelay(c, relayInfo, promptTokens, meta); err != nil {
+			service.AbortFreeGroupRequest(c, err)
+			return
+		}
+		defer service.FinishFreeGroupRelay(c)
+	}
 	switch relayInfo.RelayMode {
 	case relayconstant.RelayModeMidjourneyNotify:
 		mjErr = relay.RelayMidjourneyNotify(c)
@@ -851,6 +879,10 @@ func presentTaskSubmission(c *gin.Context, outcome *taskSubmissionOutcome) {
 }
 
 func respondTaskSubmissionError(c *gin.Context, taskErr *taskdto.TaskError) {
+	if service.IsFreeGroupRequest(c) && strings.HasPrefix(taskErr.Code, "free_group_") {
+		service.AbortFreeGroupRequest(c, taskErr.Error)
+		return
+	}
 	service.RecordRequestPolicyTermination(c, taskSubmissionAPIError(taskErr))
 	newTaskPluginSubmitDiagnostics(c).presentError(taskErr)
 	rewriteTaskErrorForResponse(c, taskErr)
@@ -862,6 +894,10 @@ func respondTaskSubmissionError(c *gin.Context, taskErr *taskdto.TaskError) {
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
 func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
+	if service.IsFreeGroupRequest(c) && strings.HasPrefix(taskErr.Code, "free_group_") {
+		service.AbortFreeGroupRequest(c, taskErr.Error)
+		return
+	}
 	rewriteTaskErrorForResponse(c, taskErr)
 	c.JSON(taskErr.StatusCode, taskErr)
 }
@@ -894,6 +930,8 @@ func decideTaskRetry(c *gin.Context, taskErr *taskdto.TaskError, retryTimes int)
 	switch {
 	case taskErr == nil:
 		stop.Reason = "request_completed"
+	case service.IsFreeGroupRequest(c) && strings.HasPrefix(taskErr.Code, "free_group_"):
+		stop.Reason, stop.Source = "free_group_rejection", "free_group"
 	case taskErr.NoRetry:
 		stop.Reason = "task_accepted"
 	case service.ShouldSkipRetryAfterChannelAffinityFailure(c):

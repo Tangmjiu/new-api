@@ -74,6 +74,12 @@ func TestShouldRetryTaskRelayHonorsPinRetryMode(t *testing.T) {
 		RetryMode: dto.PinRetrySingleAttempt,
 	})
 	assert.Equal(t, service.PolicyDecision{Action: "stop", Reason: "pinned_channel", Source: "channel_constraint"}, decideTaskRetry(token, taskErr, 1))
+
+	free := newPinRetryContext()
+	common.SetContextKey(free, constant.ContextKeyUsingGroup, model.FreeGroupName)
+	freeErr := &dto.TaskError{Code: "free_group_rate.daily_requests", StatusCode: http.StatusTooManyRequests}
+	assert.Equal(t, service.PolicyDecision{Action: "stop", Reason: "free_group_rejection", Source: "free_group"}, decideTaskRetry(free, freeErr, 3))
+	assert.Equal(t, "retry", decideTaskRetry(newPinRetryContext(), &dto.TaskError{StatusCode: http.StatusTooManyRequests}, 3).Action)
 }
 
 func TestSameChannelPinsMergeToStricterRetryMode(t *testing.T) {

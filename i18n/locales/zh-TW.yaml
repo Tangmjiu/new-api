@@ -90,3 +90,24 @@ channel.upstream_update_added_models: "新增模型範例（顯示 {{.Shown}}/{{
 channel.upstream_update_removed_models: "刪除模型範例（顯示 {{.Shown}}/{{.Total}}）：{{.Models}}"
 channel.upstream_update_failed_channels: "失敗管道 ID（顯示 {{.Shown}}/{{.Total}}）：{{.Ids}}"
 channel.upstream_update_more_omitted: "（其餘 {{.Count}} 個已省略）"
+
+free_group.disabled:
+  other: "免費分組功能尚未開放"
+
+free_group.forbidden:
+  other: "您暫不符合免費分組的存取資格"
+
+free_group.model_forbidden:
+  other: "該模型不在免費分組設定允許的範圍內"
+
+free_group.unavailable:
+  other: "免費分組服務暫時無法使用"
+
+free_group.limit:
+  other: "免費分組規則 {{.Rule}}：目前值 {{.Current}}，上限 {{.Limit}}；{{.RetryAfter}} 秒後重試；恢復條件：{{.Recovery}}"
+
+free_group.alert_title:
+  other: "免費入口警示"
+
+free_group.alert_content:
+  other: "規則 {{.Rule}}，使用者 {{.User}}：目前值 {{.Current}} / 上限 {{.Limit}}；設定版本 {{.Version}}。"

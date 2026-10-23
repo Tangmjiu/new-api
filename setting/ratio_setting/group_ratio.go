@@ -1,7 +1,6 @@
 package ratio_setting
 
 import (
-	"encoding/json"
 	"errors"
 
 	"github.com/QuantumNous/new-api/common"
@@ -60,19 +59,28 @@ func GetGroupRatioSetting() *GroupRatioSetting {
 }
 
 func GetGroupRatioCopy() map[string]float64 {
-	return groupRatioMap.ReadAll()
+	groups := groupRatioMap.ReadAll()
+	delete(groups, "free")
+	return groups
 }
 
 func ContainsGroupRatio(name string) bool {
+	if name == "free" {
+		return false
+	}
 	_, ok := groupRatioMap.Get(name)
 	return ok
 }
 
 func GroupRatio2JSONString() string {
-	return groupRatioMap.MarshalJSONString()
+	encoded, _ := common.Marshal(GetGroupRatioCopy())
+	return string(encoded)
 }
 
 func UpdateGroupRatioByJSONString(jsonStr string) error {
+	if err := CheckGroupRatio(jsonStr); err != nil {
+		return err
+	}
 	return types.LoadFromJsonString(groupRatioMap, jsonStr)
 }
 
@@ -107,11 +115,14 @@ func UpdateGroupGroupRatioByJSONString(jsonStr string) error {
 
 func CheckGroupRatio(jsonStr string) error {
 	checkGroupRatio := make(map[string]float64)
-	err := json.Unmarshal([]byte(jsonStr), &checkGroupRatio)
+	err := common.Unmarshal([]byte(jsonStr), &checkGroupRatio)
 	if err != nil {
 		return err
 	}
 	for name, ratio := range checkGroupRatio {
+		if name == "free" {
+			return errors.New("free is reserved for the independent Free module")
+		}
 		if ratio < 0 {
 			return errors.New("group ratio must be not less than 0: " + name)
 		}

@@ -89,3 +89,24 @@ channel.upstream_update_added_models: "Added model examples (showing {{.Shown}}/
 channel.upstream_update_removed_models: "Removed model examples (showing {{.Shown}}/{{.Total}}): {{.Models}}"
 channel.upstream_update_failed_channels: "Failed channel IDs (showing {{.Shown}}/{{.Total}}): {{.Ids}}"
 channel.upstream_update_more_omitted: " ({{.Count}} more omitted)"
+
+free_group.disabled:
+  other: "The free group feature is not enabled"
+
+free_group.forbidden:
+  other: "You are not eligible for the free group"
+
+free_group.model_forbidden:
+  other: "This model is not allowed by the free group configuration"
+
+free_group.unavailable:
+  other: "The free group service is temporarily unavailable"
+
+free_group.limit:
+  other: "Free rule {{.Rule}}: current {{.Current}}, limit {{.Limit}}; retry after {{.RetryAfter}} seconds; recovery: {{.Recovery}}"
+
+free_group.alert_title:
+  other: "Free access alert"
+
+free_group.alert_content:
+  other: "Rule {{.Rule}}, user {{.User}}: {{.Current}} / {{.Limit}}; configuration version {{.Version}}."

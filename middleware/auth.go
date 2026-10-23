@@ -621,20 +621,33 @@ func TokenAuth() func(c *gin.Context) {
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group
+		if userGroup == model.FreeGroupName && tokenGroup != model.FreeGroupName {
+			service.AbortFreeGroupRequest(c, service.ErrFreeGroupForbidden)
+			return
+		}
 		if tokenGroup != "" {
-			groupAccess := service.GetRequestUserGroupAccess(c)
-			if !groupAccess.Allows(tokenGroup) {
-				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": tokenGroup}))
-				return
-			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupDeprecated, map[string]any{"Group": tokenGroup}))
+			if tokenGroup == model.FreeGroupName {
+				if err := service.CheckFreeGroupAccess(token.UserId); err != nil {
+					service.AbortFreeGroupRequest(c, err)
 					return
 				}
+				common.SetContextKey(c, constant.ContextKeyFreeGroup, true)
+				userGroup = model.FreeGroupName
+			} else {
+				groupAccess := service.GetRequestUserGroupAccess(c)
+				if !groupAccess.Allows(tokenGroup) {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": tokenGroup}))
+					return
+				}
+				// check group in common.GroupRatio
+				if !ratio_setting.ContainsGroupRatio(tokenGroup) {
+					if tokenGroup != "auto" {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupDeprecated, map[string]any{"Group": tokenGroup}))
+						return
+					}
+				}
+				userGroup = tokenGroup
 			}
-			userGroup = tokenGroup
 		}
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
 

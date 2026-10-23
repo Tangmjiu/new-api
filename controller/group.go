@@ -24,6 +24,19 @@ func GetGroups(c *gin.Context) {
 	})
 }
 
+// GetChannelGroups exposes the Free routing marker only to channel editors.
+// Traditional user groups and ratio settings never include this marker.
+func GetChannelGroups(c *gin.Context) {
+	groupNames := make([]string, 0)
+	for groupName := range ratio_setting.GetGroupRatioCopy() {
+		groupNames = append(groupNames, groupName)
+	}
+	if service.GetFreeGroupConfig().Config.Enabled {
+		groupNames = append(groupNames, model.FreeGroupName)
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": groupNames})
+}
+
 func GetUserGroups(c *gin.Context) {
 	usableGroups := make(map[string]map[string]interface{})
 	userGroup := ""
@@ -49,6 +62,13 @@ func GetUserGroups(c *gin.Context) {
 			"ratio":         "auto",
 			"desc":          autoDescription,
 			"default_model": ratio_setting.GetGroupDefaultModel("auto"),
+		}
+	}
+	if service.CheckFreeGroupAccess(userId) == nil {
+		usableGroups[model.FreeGroupName] = map[string]any{
+			"ratio":         "free",
+			"desc":          "Free group",
+			"default_model": "",
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{

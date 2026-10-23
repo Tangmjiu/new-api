@@ -575,6 +575,12 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	token := request.Token
+	if token.Group == model.FreeGroupName {
+		if err := service.CheckFreeGroupAccess(c.GetInt("id")); err != nil {
+			service.AbortFreeGroupRequest(c, err)
+			return
+		}
+	}
 	// User API keys remain valid until explicitly reset; expiry is reserved for
 	// server-managed channel tokens.
 	token.ExpiredTime = -1
@@ -676,6 +682,12 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	token := request.Token
+	if token.Group == model.FreeGroupName {
+		if err := service.CheckFreeGroupAccess(c.GetInt("id")); err != nil {
+			service.AbortFreeGroupRequest(c, err)
+			return
+		}
+	}
 	token.ExpiredTime = -1
 	if len(token.Name) > 50 {
 		common.ApiErrorT(c, "Token name is too long")
@@ -702,7 +714,7 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorT(c, "Token has expired and cannot be enabled. Please modify the expiration time or set it to never expire")
 			return
 		}
-		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
+		if cleanToken.Group != model.FreeGroupName && cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
 			common.ApiErrorT(c, "Token quota is exhausted and cannot be enabled. Please modify the remaining quota or set it to unlimited")
 			return
 		}

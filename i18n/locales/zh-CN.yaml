@@ -90,3 +90,24 @@ channel.upstream_update_added_models: "新增模型示例（展示 {{.Shown}}/{{
 channel.upstream_update_removed_models: "删除模型示例（展示 {{.Shown}}/{{.Total}}）：{{.Models}}"
 channel.upstream_update_failed_channels: "失败渠道 ID（展示 {{.Shown}}/{{.Total}}）：{{.Ids}}"
 channel.upstream_update_more_omitted: "（其余 {{.Count}} 个已省略）"
+
+free_group.disabled:
+  other: "免费分组功能未开放"
+
+free_group.forbidden:
+  other: "您暂不符合免费分组的访问资格"
+
+free_group.model_forbidden:
+  other: "该模型不在免费分组配置允许的范围内"
+
+free_group.unavailable:
+  other: "免费分组服务暂时不可用"
+
+free_group.limit:
+  other: "免费分组规则 {{.Rule}}：当前值 {{.Current}}，上限 {{.Limit}}；{{.RetryAfter}} 秒后重试；恢复条件：{{.Recovery}}"
+
+free_group.alert_title:
+  other: "免费入口告警"
+
+free_group.alert_content:
+  other: "规则 {{.Rule}}，用户 {{.User}}：当前值 {{.Current}} / 上限 {{.Limit}}；配置版本 {{.Version}}。"

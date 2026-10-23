@@ -301,6 +301,20 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 4. 价格计算：基础模型价格
 	info.OriginModelName = modelName
+	if service.IsFreeGroupRequest(c) {
+		meta, err := service.FreeGroupTaskTokenMeta(c, modelName)
+		if err != nil {
+			return nil, service.TaskErrorFromAPIError(service.FreeRelayAPIError(err))
+		}
+		promptTokens, err := service.CountRequestToken(c, meta, info)
+		if err != nil {
+			return nil, service.TaskErrorFromAPIError(service.FreeRelayAPIError(err))
+		}
+		info.SetEstimatePromptTokens(promptTokens)
+		if err := service.BeginFreeGroupRelay(c, info, promptTokens, meta); err != nil {
+			return nil, service.TaskErrorFromAPIError(service.FreeRelayAPIError(err))
+		}
+	}
 	var priceData types.PriceData
 	var err error
 	pluginKey := c.GetString("task_plugin_key")
@@ -311,7 +325,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	exprStr, exists := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
 	useTiered := exists || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr
-	if useTiered {
+	if service.FreeGroupBillingBypass(c, info) {
+		priceData, err = helper.ModelPriceHelperPerCall(c, info)
+		if err != nil {
+			return nil, service.TaskErrorFromAPIError(service.FreeRelayAPIError(err))
+		}
+	} else if useTiered {
 		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
 		if billingexpr.UsesFixedPricing(exprStr) {
 			return nil, service.TaskErrorWrapper(fmt.Errorf("fixed pricing is not supported for task usage expressions"), "model_price_error", http.StatusBadRequest, common.UpstreamAddresses(c)...)
@@ -359,7 +378,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
 	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
 	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if info.TieredBillingSnapshot == nil {
+	if info.TieredBillingSnapshot == nil && !service.FreeGroupBillingBypass(c, info) {
 		var estimatedRatios map[string]float64
 		if validatedProvider, ok := adaptor.(channel.TaskValidatedBillingProvider); ok {
 			estimatedRatios, err = validatedProvider.EstimateBillingValidated(c, info)
@@ -462,7 +481,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 				noteTaskQuotaClamp(info, settlement.Clamp)
 			}
 		}
-	} else {
+	} else if !service.FreeGroupBillingBypass(c, info) {
 		if adjustedRatios := adaptor.AdjustBillingOnSubmit(info, parsed.TaskData); len(adjustedRatios) > 0 {
 			if adjustedQuota, ok := recalcQuotaFromRatios(info, adjustedRatios); ok {
 				// 基于调整后的 ratios 重新计算 quota
