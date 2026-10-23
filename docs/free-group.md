@@ -13,6 +13,26 @@
 
 核心文件：`model/free_group.go`、`service/free_group*.go`、`controller/free_group.go`。接入点见 `middleware/auth.go`、`middleware/distributor.go`、`relay/request_billing.go`。
 
+## 1Panel 部署与模型选择
+
+Free 的并发、排队和额度依赖 Redis。普通 New API 可以不配置 Redis，但这不代表 Free 能在相同部署条件下运行。旧版笼统的 `free group concurrency service is unavailable` 在未配置 Redis 时就会出现，与模型是否选对无关。
+
+1. 在 1Panel 安装 Redis，或使用已经部署的 Redis。
+2. 在 **New API 容器**的环境变量中添加连接串，然后重新创建或重启该服务以加载环境变量：
+
+   ```text
+   REDIS_CONN_STRING=redis://default:<URL编码后的密码>@<Redis连接地址>:6379/0
+   ```
+
+   使用 New API 容器能够访问的 Redis 地址。同一 Docker 网络可使用 Redis 的容器名；不要把另一个容器写成 `127.0.0.1`。端口以实际 Redis 配置为准，密码中的特殊字符需要 URL 编码。不要把连接串或密码粘贴到公开日志或截图中。
+3. 打开「免费分组设置」。页面会明确提示 Redis 是否配置，以及配置是否已激活。缺少 Redis 时仍可保存设置，显示「等待生效」，不会绕过保护放行免费请求。
+4. 到现有「渠道」页，编辑准备供免费入口使用的渠道，在分组中添加 `free`，确认相应模型已配置、渠道已启用。可以先配置渠道，再开启 Free。
+5. 在 Free 的「模型」区域，从「免费可用模型」选择框多选模型并保存。**无需填写 JSON、渠道名或倍率**。候选来自已有启用渠道中的模型，不会自动添加模型或改变渠道路由。
+
+「渠道已配置」表示该模型存在启用的 `free` 渠道记录；「未配置免费渠道」会提示前往渠道页处理。这是配置检查，不是上游连通性保证。默认开启模型限制且没有选中模型时，免费请求会被拒绝；页面会直接说明原因。关闭模型限制或放行未选模型仍需要高风险确认。
+
+配置页复用 `SettingsPageFrame` 的页头保存/重置按钮、`SettingsCard`、`SettingsAccordion`、`SettingsSwitchField` 和已有 `MultiSelect`。每次展开一个规则分区，使用量、审计、历史版本和成员操作分别位于各自标签页。保存只计算差异与风险，不再强制扫描用户；「预览影响面」由管理员按需点击。
+
 ## 配置结构
 
 配置为完整 JSON 文档。缺省值由 `model.DefaultFreeGroupConfig()` 提供；管理接口解析时先填充默认值。保存使用 `version` 乐观锁，冲突返回 409，不能覆盖别人已提交的修改。

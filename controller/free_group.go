@@ -47,6 +47,17 @@ func GetFreeGroupConfig(c *gin.Context) {
 	if snapshot.Ready {
 		effectiveVersion = snapshot.Version
 	}
+	// Use the existing channel abilities as-is, but report missing routes instead
+	// of presenting a model selection that appears ready and fails at relay time.
+	var availableModels, routedModels []string
+	if err := model.DB.Table("abilities").Where("enabled = ?", true).Distinct("model").Pluck("model", &availableModels).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.DB.Table("abilities").Where(map[string]any{"enabled": true, "group": model.FreeGroupName}).Distinct("model").Pluck("model", &routedModels).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	common.ApiSuccess(c, gin.H{
 		"config": config, "version": record.Version, "preset": record.Preset,
 		"updated_by": record.UpdatedBy, "updated_at": record.UpdatedAt,
@@ -54,7 +65,10 @@ func GetFreeGroupConfig(c *gin.Context) {
 		"effective_version": effectiveVersion,
 		"ready":             snapshot.Ready,
 		"strength_score":    service.FreeGroupStrength(config),
-		"available_models":  model.GetEnabledModels(),
+		"available_models":  availableModels,
+		"routed_models":     routedModels,
+		"redis_configured":  common.RDB != nil && common.RedisEnabled,
+		"runtime_issue":     service.FreeGroupRuntimeIssue(),
 		"bindings":          []string{"email", "github", "discord", "oidc", "wechat", "telegram", "linuxdo", "oauth"},
 	})
 }
@@ -341,6 +355,20 @@ func PreviewFreeGroupConfig(c *gin.Context) {
 	}
 	if err := service.ValidateFreeGroupConfig(request.Config); err != nil {
 		common.ApiErrorStatus(c, 400, err)
+		return
+	}
+	if c.Query("summary_only") == "true" {
+		record, err := model.GetFreeGroupConfigRecord()
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		current := model.DefaultFreeGroupConfig()
+		if err := common.UnmarshalJsonStr(record.Config, &current); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, gin.H{"high_risk": service.FreeGroupConfigHighRisk(request.Config) || service.FreeGroupRelaxed(current, request.Config)})
 		return
 	}
 	preview, err := service.PreviewFreeGroupImpact(c.Request.Context(), request.Config)

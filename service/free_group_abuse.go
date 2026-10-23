@@ -217,7 +217,10 @@ func CheckFreeGroupCooldown(c *gin.Context, userID int) error {
 	}
 	script := `local spec=cjson.decode(ARGV[1]);local clock=redis.call('TIME');local now=tonumber(clock[1])*1000+math.floor(tonumber(clock[2])/1000);` + freePenaltyPrelude + `return {1,0,0,0,now,'[]'}`
 	result, err := common.RDB.Eval(c.Request.Context(), script, keys, string(spec)).Slice()
-	if err != nil || len(result) != 6 {
+	if err != nil {
+		return freeRedisFailure("cooldown", err)
+	}
+	if len(result) != 6 {
 		return ErrFreeGroupRedis
 	}
 	status, err := strconv.ParseInt(fmt.Sprint(result[0]), 10, 64)

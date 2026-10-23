@@ -16,8 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export type ConfigValue = string | number | boolean | null | ConfigObject | ConfigValue[]
-export interface ConfigObject { [key: string]: ConfigValue }
+export type ConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ConfigObject
+  | ConfigValue[]
+export interface ConfigObject {
+  [key: string]: ConfigValue
+}
 export interface FreeConfigRecord {
   config: ConfigObject
   defaults: ConfigObject
@@ -28,6 +36,9 @@ export interface FreeConfigRecord {
   ready: boolean
   strength_score: number
   available_models: string[]
+  routed_models: string[]
+  redis_configured: boolean
+  runtime_issue: string
   bindings: string[]
 }
 export interface FreeUsage {

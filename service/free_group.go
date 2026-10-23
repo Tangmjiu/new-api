@@ -25,11 +25,12 @@ import (
 const freeGroupNamespace = "new-api:{free-group}:v1"
 
 var (
-	freeConfigMu    sync.RWMutex
-	freeConfig      model.FreeGroupConfig
-	freeVersion     int64
-	freeLoaded      atomic.Bool
-	freeSchemaReady atomic.Bool
+	freeConfigMu     sync.RWMutex
+	freeConfig       model.FreeGroupConfig
+	freeVersion      int64
+	freeLoaded       atomic.Bool
+	freeSchemaReady  atomic.Bool
+	freeRuntimeIssue atomic.Value // A safe, actionable message for administrators.
 )
 
 var (
@@ -39,7 +40,7 @@ var (
 	ErrFreeGroupCapacity                 = errors.New("free group concurrency limit reached")
 	ErrFreeGroupQueueFull                = errors.New("free group queue is full")
 	ErrFreeGroupQueueTimeout             = errors.New("free group queue wait timed out")
-	ErrFreeGroupRedis                    = errors.New("free group concurrency service is unavailable")
+	ErrFreeGroupRedis                    = errors.New("Free runtime is unavailable; check the Redis connection and server logs")
 	ErrFreeGroupRiskConfirmationRequired = errors.New("free group high-risk confirmation is required")
 )
 
@@ -72,6 +73,11 @@ func RefreshFreeGroupConfig() (err error) {
 	defer func() {
 		if err != nil {
 			freeLoaded.Store(false)
+			if common.RDB == nil || !common.RedisEnabled {
+				freeRuntimeIssue.Store("Redis is not configured. Set REDIS_CONN_STRING on the New API service and restart it.")
+			} else {
+				freeRuntimeIssue.Store("Free configuration could not be activated. Check the Redis connection and server logs.")
+			}
 		}
 	}()
 	record, err := model.GetFreeGroupConfigRecord()
@@ -87,14 +93,14 @@ func RefreshFreeGroupConfig() (err error) {
 		return err
 	}
 	if config.Enabled && (common.RDB == nil || !common.RedisEnabled) {
-		return ErrFreeGroupRedis
+		return fmt.Errorf("%w: REDIS_CONN_STRING is not configured", ErrFreeGroupRedis)
 	}
 	if common.RDB != nil && common.RedisEnabled {
 		syncCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		_, syncErr := common.RDB.Eval(syncCtx, `local v=tonumber(redis.call('HGET',KEYS[1],'version')) or 0;if v<=tonumber(ARGV[1]) then redis.call('HSET',KEYS[1],'version',ARGV[1],'enabled',ARGV[2]) end;return 1`, []string{freeGroupNamespace + ":config"}, record.Version, strconv.FormatBool(config.Enabled)).Result()
 		cancel()
-		if syncErr != nil {
-			return ErrFreeGroupRedis
+		if syncErr != nil && config.Enabled {
+			return freeRedisFailure("configuration_sync", syncErr)
 		}
 	}
 	freeConfigMu.Lock()
@@ -106,7 +112,23 @@ func RefreshFreeGroupConfig() (err error) {
 	freeVersion = record.Version
 	freeConfigMu.Unlock()
 	freeLoaded.Store(true)
+	freeRuntimeIssue.Store("")
 	return nil
+}
+
+func FreeGroupRuntimeIssue() string {
+	if issue, ok := freeRuntimeIssue.Load().(string); ok {
+		return issue
+	}
+	return ""
+}
+
+// Keep the underlying component error in server logs, never credentials or
+// request content in API responses. Free remains fail-closed on every error.
+func freeRedisFailure(operation string, err error) error {
+	freeComponentErrors.WithLabelValues(operation).Inc()
+	common.SysError(fmt.Sprintf("Free runtime %s failed: %v", operation, err))
+	return ErrFreeGroupRedis
 }
 
 func StartFreeGroupConfigSync(ctx context.Context, frequency time.Duration) {
@@ -363,9 +385,6 @@ func FreeGroupConfigHighRisk(config model.FreeGroupConfig) bool {
 func SaveFreeGroupConfig(config model.FreeGroupConfig, expectedVersion int64, updatedBy int, summary string, confirmHighRisk bool) (int64, error) {
 	if err := ValidateFreeGroupConfig(config); err != nil {
 		return 0, err
-	}
-	if config.Enabled && (common.RDB == nil || !common.RedisEnabled) {
-		return 0, ErrFreeGroupRedis
 	}
 	encoded, err := common.Marshal(config)
 	if err != nil {

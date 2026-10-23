@@ -291,7 +291,10 @@ func acquireFreeConcurrency(ctx context.Context, request FreeConcurrencyRequest,
 			return nil, err
 		}
 		result, err := common.RDB.Eval(ctx, freeConcurrencyAcquireScript, scriptKeys, string(encoded)).Int64Slice()
-		if err != nil || (len(result) != 5 && len(result) != 8) {
+		if err != nil {
+			return nil, freeRedisFailure("concurrency_acquire", err)
+		}
+		if len(result) != 5 && len(result) != 8 {
 			return nil, ErrFreeGroupRedis
 		}
 		if len(result) == 8 {

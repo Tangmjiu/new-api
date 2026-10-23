@@ -278,7 +278,10 @@ func reserveFreeGroupUsage(ctx context.Context, config model.FreeGroupConfig, us
 		return nil, err
 	}
 	raw, err := common.RDB.Eval(ctx, freeRateTakeScript, keys, string(spec)).Slice()
-	if err != nil || len(raw) != 6 {
+	if err != nil {
+		return nil, freeRedisFailure("rate_reservation", err)
+	}
+	if len(raw) != 6 {
 		return nil, ErrFreeGroupRedis
 	}
 	values := make([]int64, 5)

@@ -24,16 +24,17 @@ func GetGroups(c *gin.Context) {
 	})
 }
 
-// GetChannelGroups exposes the Free routing marker only to channel editors.
+// GetChannelGroups exposes the Free routing marker only to channel editors,
+// including before the module is enabled so routes can be prepared first.
 // Traditional user groups and ratio settings never include this marker.
 func GetChannelGroups(c *gin.Context) {
 	groupNames := make([]string, 0)
 	for groupName := range ratio_setting.GetGroupRatioCopy() {
 		groupNames = append(groupNames, groupName)
 	}
-	if service.GetFreeGroupConfig().Config.Enabled {
-		groupNames = append(groupNames, model.FreeGroupName)
-	}
+	// Administrators can prepare routes before enabling the feature. This list
+	// is channel-only and never makes Free available to users on its own.
+	groupNames = append(groupNames, model.FreeGroupName)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": groupNames})
 }
 
