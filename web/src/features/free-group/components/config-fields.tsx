@@ -264,7 +264,11 @@ function ConfigField(
   const form = useFormContext<FreeConfigForm>()
   const path = `${props.path}.${props.fieldKey}`
   const defaultValue = configAt(props.defaults, path)
-  const label = t(CONFIG_LABELS[props.fieldKey] ?? props.fieldKey)
+  const label = t(
+    path === 'penalty.whitelist_enabled'
+      ? 'Whitelist'
+      : CONFIG_LABELS[props.fieldKey] ?? props.fieldKey
+  )
   const value = props.fieldValue
   const disabled =
     props.disabled ||
@@ -433,8 +437,9 @@ export function ConfigFields(props: FieldsProps) {
   const form = useFormContext<FreeConfigForm>()
   const fields = SECTION_FIELDS[props.path] ?? Object.keys(props.value)
   const hasSwitch = typeof props.value.enabled === 'boolean'
-  const heading =
-    CONFIG_LABELS[props.path.split('.').at(-1) ?? ''] ?? props.path
+  const heading = props.path === 'anti_abuse.actions.notify'
+    ? CHOICE_LABELS.alert
+    : CONFIG_LABELS[props.path.split('.').at(-1) ?? ''] ?? props.path
   return (
     <div className='space-y-4'>
       {hasSwitch && (
