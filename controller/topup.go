@@ -389,7 +389,13 @@ func getTopUpQuota(amount int64) (int, error) {
 		quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 		quota = decimal.NewFromInt(quota.Div(quotaPerUnit).IntPart()).Mul(quotaPerUnit)
 	} else {
-		quota = quota.Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+		// amount is denominated in the displayed currency; convert to USD before
+		// applying QuotaPerUnit so CNY/custom topups credit the value actually paid.
+		rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+		if rate <= 0 {
+			rate = 1
+		}
+		quota = quota.Div(decimal.NewFromFloat(rate)).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
 	}
 	return common.WalletQuotaFromDecimalStrict(quota)
 }
