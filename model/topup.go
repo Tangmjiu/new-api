@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -264,6 +265,20 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 // 在同一个事务内完成，因此同一订单的并发/重复回调（包括多实例部署下）最多充值一次。
 // alreadyDone=true 表示订单此前已完成，本次为幂等重复回调。
 // 进程内的 LockOrder 只是优化，正确性由本函数的数据库行锁保证。
+// topUpAmountToQuota converts a top-up amount denominated in the displayed
+// currency into internal quota (1 USD = QuotaPerUnit) using the display rate.
+func topUpAmountToQuota(amount int64) (int, error) {
+	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	if rate <= 0 {
+		rate = 1
+	}
+	return common.QuotaFromDecimalStrict(
+		decimal.NewFromInt(amount).
+			Div(decimal.NewFromFloat(rate)).
+			Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
+	)
+}
+
 func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string, paid ...PaidFiat) (alreadyDone bool, err error) {
 	if tradeNo == "" {
 		return false, errors.New("payment order number not provided")
@@ -297,9 +312,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string, p
 			quotaToAdd = 1
 		} else {
 			var quotaErr error
-			quotaToAdd, quotaErr = common.QuotaFromDecimalStrict(
-				decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-			)
+			quotaToAdd, quotaErr = topUpAmountToQuota(topUp.Amount)
 			if quotaErr != nil || quotaToAdd <= 0 {
 				return ErrInvalidTopUpQuota
 			}
@@ -610,9 +623,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 					decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 				)
 			} else {
-				quotaToAdd, quotaErr = common.QuotaFromDecimalStrict(
-					decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-				)
+				quotaToAdd, quotaErr = topUpAmountToQuota(topUp.Amount)
 			}
 			if quotaErr != nil || quotaToAdd <= 0 {
 				return ErrInvalidTopUpQuota
