@@ -170,7 +170,7 @@ func SubscriptionRequestPaymentQuote(c *gin.Context) {
 			common.ApiErrorMsg(c, "不支持的支付方式")
 			return
 		}
-		quote.Amount = applyEpayFee(plan.PriceAmount, req.Method, req.Gateway)
+		quote.Amount = applyEpayFee(subscriptionPlanPriceCNY(plan), req.Method, req.Gateway)
 		quote.Currency = "CNY"
 	}
 	if quote.Amount < 0 || math.IsNaN(quote.Amount) || math.IsInf(quote.Amount, 0) {

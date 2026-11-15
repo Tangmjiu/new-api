@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Calcium-Ion/go-epay/epay"
@@ -21,6 +22,25 @@ type SubscriptionEpayPayRequest struct {
 	PlanId        int    `json:"plan_id"`
 	PaymentMethod string `json:"payment_method"`
 	EpayGatewayID string `json:"epay_gateway"`
+}
+
+// subscriptionPlanPriceCNY converts a plan price stored in the plan's own
+// currency (typically USD) into the CNY amount the epay gateway charges.
+// The web console renders price_amount through the USD->display exchange
+// rate, so applying the same rate here keeps the charged amount equal to the
+// price the user sees. Plans already priced in CNY are returned unchanged.
+func subscriptionPlanPriceCNY(plan *model.SubscriptionPlan) float64 {
+	if plan == nil {
+		return 0
+	}
+	if strings.EqualFold(strings.TrimSpace(plan.Currency), "CNY") {
+		return plan.PriceAmount
+	}
+	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	if rate <= 0 {
+		rate = 1
+	}
+	return plan.PriceAmount * rate
 }
 
 func SubscriptionRequestEpay(c *gin.Context) {
@@ -84,7 +104,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		return
 	}
 
-	payMoney := applyEpayFee(plan.PriceAmount, req.PaymentMethod, req.EpayGatewayID)
+	payMoney := applyEpayFee(subscriptionPlanPriceCNY(plan), req.PaymentMethod, req.EpayGatewayID)
 	if payMoney < 0.01 || math.IsNaN(payMoney) || math.IsInf(payMoney, 0) {
 		common.ApiErrorMsg(c, "套餐支付金额无效")
 		return
